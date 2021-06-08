@@ -2,7 +2,10 @@
 title: "Final Project"
 author: "Cihan"
 date: "14 05 2021"
-output: html_document
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -21,6 +24,8 @@ Portali https://acikveri.bizizmir.com/dataset). In this project we will try to a
 library(ggplot2)
 library('stringr')
 library(dplyr)
+library(ggpubr)
+library(moments)
 
 ```
 
@@ -78,6 +83,8 @@ summary(animal.food)
 
 3. In **Animal Food**, *'year'* and *'month'* columns' type should be String.
 
+4. For all data we convert *'character'* type variable into *'factor'*
+
 ```{r echo=TRUE}
 
 water.consumption$avg_consumption <- str_replace_all(water.consumption$avg_consumption , ',', '.')
@@ -86,21 +93,36 @@ paste("Edit for Water Consumption")
 water.consumption$avg_consumption = as.numeric(as.character(water.consumption$avg_consumption))
 water.consumption$year = as.character(as.numeric(water.consumption$year))
 water.consumption$month = as.character(as.numeric(water.consumption$month))
-paste("Types of Features in Water Consumption after Edit")
-sapply(water.consumption, mode)
+
+names <- c('year' ,'month', 'district','neighborhood')
+water.consumption[,names] <- lapply(water.consumption[,names] , factor)
+paste("Summary for Water Production after Edit")
+sapply(water.consumption, summary)
+
+##############
 
 paste("Edit for Water Production")
 water.production$amount_m3 = as.numeric(as.character(water.production$amount_m3))
 water.production$year = as.character(as.numeric(water.production$year))
 water.production$month = as.character(as.numeric(water.production$month))
-paste("Types of Features in Water Production after Edit")
-sapply(water.production, mode)
+
+names <- c('year' ,'month', 'source')
+water.production[,names] <- lapply(water.production[,names] , factor)
+paste("Summary for Water Production after Edit")
+sapply(water.production, summary)
+
+#############
 
 paste("Edit for Animal Food")
 animal.food$year = as.character(as.numeric(animal.food$year))
 animal.food$month = as.character(as.numeric(animal.food$month))
-paste("Types of Features in Water Animal Food after Edit")
-sapply(animal.food, mode)
+#There is no information about neighborhood then we'll drop it
+animal.food = subset(animal.food, select = -(neighborhood) )
+
+names <- c('year' ,'month', 'district', 'distributor', 'unit')
+animal.food[,names] <- lapply(animal.food[,names] , factor)
+paste("Summary for Water Production after Edit")
+sapply(animal.food, summary)
 
 
 ```
@@ -110,7 +132,8 @@ sapply(animal.food, mode)
 ### Let's take the Water Consumption of 2020 and show the most 5 consumer districts in Izmir
 - Subset the values which are belong the 2020 and summarize the data.
 - Create a new feature that refers total consumption rather than average consumption
-**Note:** Due to values are huge for total consumption we'll take the m^3/10^3
+
+**Note:** Due to values are huge for total consumption we'll take the (m^3) / (10^3)
 ```{r message = FALSE, warning=FALSE}
 consumption.2020 = subset(water.consumption, subset = water.consumption$year == 2020)
 #Created a new feature called consumption which refers total consumption
@@ -121,24 +144,54 @@ summary(consumption.2020)
 ```
 
 
-- Show the most consumer districts and plot them
+- Show the most consumer districts.
+```{r  message = FALSE, warning=FALSE}
+#We can see the most consumer districts in 2020 in Izmir.
+df1 <- consumption.2020 %>% 
+  group_by(district) %>% 
+  summarize(total_consumption = sum(consumption_in_month))
+
+df1 <- df1 %>%
+  arrange(desc(total_consumption))
+
+df1 %>% tbl_df %>% print(n=40)
+
+df1 <- df1 %>% slice_max(total_consumption, n = 5)
+
+
+```
+
+- Show the most crowded districts.
 ```{r  message = FALSE, warning=FALSE}
 #We can see the most consumer districts in 2020 in Izmir.
 df <- consumption.2020 %>% 
   group_by(district) %>% 
-  summarize(total_consumption = sum(consumption_in_month))
+  summarize(total_user = sum(user_count))
 
 df <- df %>%
-  arrange(desc(total_consumption))
+  arrange(desc(total_user))
 
 df %>% tbl_df %>% print(n=40)
 
-df <- df %>% slice_max(total_consumption, n = 5)
+df <- df %>% slice_max(total_user, n = 5)
 
-p<-ggplot(data=df, aes(x=reorder(district, -total_consumption), y=total_consumption)) +
+```
+
+-Now take a closer look at most crowded districts and most consumer districts.
+```{r}
+p1<-ggplot(data=df, aes(x=reorder(district, -total_user), y=total_user)) +
   geom_bar(stat="identity", fill="orange")
 
-p + labs(title = "Most 5 Consumer Districts", x='District', y='Total Consumption(m^3/10^3)')
+p1 <- p1 + labs(title = "Most 5 Crowded Districts", x='District', y='Total User in a Year')
+
+
+
+p2<-ggplot(data=df1, aes(x=reorder(district, -total_consumption), y=total_consumption)) +
+  geom_bar(stat="identity", fill="orange")
+
+p2 <- p2 + labs(title = "Most 5 Consumer Districts", x='District', y='Total Consumption(m^3/10^3)')
+
+ggarrange(p1, p2, ncol =1, nrow = 2)
 
 ```
 
@@ -170,8 +223,173 @@ p + labs(title = "Count of Neighborhoods for Districts", x='District', y='Count 
 ```{r  message = FALSE, warning=FALSE, echo=FALSE}
 top.two.consumer$month = as.numeric(as.character(top.two.consumer$month))
 summary_data <- tapply(top.two.consumer$consumption_in_month, list(months = top.two.consumer$month,
-                                       districts = top.two.consumer$district),
+                                       districts = as.character(top.two.consumer$district)),
                        FUN = mean, na.rm = TRUE)
 summary_data
 
 ```
+
+**Note:** It seems that there are some mistakes in data for 4th and 5th months.
+
+- Is water consumption correlated with user count of districts?
+
+- Let's see how consumption changes with the number of users.
+
+```{r}
+
+p <- ggplot(data=consumption.2020, aes(x=consumption_in_month, y=user_count))  + geom_point() 
+p + labs(title = "Change of Consumpiton With User Count", x='Avg Consumption', y='User Count')
+cor(consumption.2020$consumption_in_month,consumption.2020$user_count)
+```
+
+**Note:** We can clearly see from the above plot there is a linear correlation between user counts and water consumption. Now let's visualize the data and see the shape of it.
+
+```{r}
+base.plot <- ggplot(consumption.2020, aes(x = consumption_in_month)) +
+  xlab("consumption_in_month") 
+
+
+p1 <- base.plot + geom_histogram()
+p2 <- base.plot + geom_boxplot()
+p3 <- base.plot + geom_density()
+
+
+ggarrange(p1, p2, p3, ncol =2, nrow = 2, labels = c( "Geom Histogram","Boxplot","Density"))
+
+#It seems that we have a right skewed data. Let's see the skewness rate of the data
+skewness(consumption.2020$consumption_in_month, na.rm = TRUE)
+```
+
+
+
+- We'll have square root(double) transform for transform right skewed data to normally distributed data.
+
+```{r}
+consumption.2020.transform <- transform(consumption.2020, 
+            consumption_in_month = sqrt(sqrt(consumption_in_month)))
+            
+
+
+base.plot <- ggplot(consumption.2020.transform, aes(x = consumption_in_month)) +
+  xlab("consumption_in_month") 
+
+
+p1 <- base.plot + geom_histogram()
+p2 <- base.plot + geom_boxplot()
+p3 <- base.plot + geom_density()
+
+
+ggarrange(p1, p2, p3, ncol =2, nrow = 2, labels = c( "Geom Histogram","Boxplot","Density"))
+
+#It seems that we did a good job and transformed the data to normally distributed. Now take look at skewness rate again
+skewness(consumption.2020.transform$consumption_in_month, na.rm = TRUE)
+
+
+
+p <- ggplot(data=consumption.2020.transform, aes(x=consumption_in_month, y=user_count))  + geom_point() 
+p + labs(title = "Change of Consumpiton With User Count", x='Avg Consumption', y='User Count')
+
+#Now take a look for correlation between water consumption and user count after making data normally distriubted
+cor(consumption.2020.transform$consumption_in_month,consumption.2020$user_count)
+
+#It's still seem that there is high correlation between consumption and user count
+```
+
+
+### **Confidence Intervals**
+
+#### Let's take the Water Consumption of 2020 and compare the consumption based on winter and summer
+
+**Note:** Don't forget that we're working on the transformed data!
+
+- First we'll categorize the months and just looking at the winter and summer
+```{r}
+consumption.2020.transform$month = as.numeric(as.character(consumption.2020.transform$month))
+consumption.2020.transform$seasons = cut(consumption.2020.transform$month,c(0,2,5,8,11,12))
+levels(consumption.2020.transform$seasons) = c("winter","spring","summer","autumn","winter")
+#select(consumption.2020, month, seasons)
+
+#subset the winter and summer
+winter.vs.summer = subset(consumption.2020.transform, subset = consumption.2020.transform$seasons == "winter" | consumption.2020.transform$seasons == "summer" )
+summary(winter.vs.summer)
+
+qplot(x = seasons, y = consumption_in_month,
+      geom = "boxplot", data = winter.vs.summer,
+      xlab = "Seasons", 
+      ylab = "Consumption in m3 / 10^3",
+      fill = I("lightblue"))
+```
+
+**The boxplot suggest that winter is associated with less water consumption.**
+
+
+Let's compute a summary table and see it better. *(Don't forget that these values are transformed)*
+
+```{r}
+
+#data.for.summary.table <- transform(winter.vs.summer, 
+ #           consumption_in_month = (consumption_in_month)**4)
+            
+
+
+#aggregate(consumption_in_month ~ seasons, 
+        #  data = data.for.summary.table, 
+        #  FUN = function(x) {c(mean = mean(x), sd = sd(x))})
+
+aggregate(consumption_in_month ~ seasons, 
+          data = winter.vs.summer, 
+          FUN = function(x) {c(mean = mean(x), sd = sd(x))})
+```
+
+**Now the summary table shows the difference significantly We shouldn't forget that the consumption_in_month represents (m^3^ / 10^3^). It means that we should multiply the values with 1000 to access real m^3^ values of water consumption.(Also these values are transformed) **
+
+
+```{r}
+#Mean for consumption_in_month(m^3 / 1000)
+mean(winter.vs.summer$consumption_in_month)
+```
+
+**We assume that we don't have an information about the population varience and we'll use the t-score for calculating Confidence Intervals**
+
+Let's take the winter and summer one by one and compare their Confidence Intervals
+
+```{r}
+winter = subset(winter.vs.summer, subset = winter.vs.summer$seasons == "winter")
+summer = subset(winter.vs.summer, subset = winter.vs.summer$seasons == "summer")
+
+
+#Confidence Interval of Winter consumption_in_month(m^3 / 1000)
+winter.CI <- t.test(winter$consumption_in_month)$conf.int
+winter.CI
+
+#Confidence Interval of Summer consumption_in_month(m^3 / 1000)
+summer <- t.test(summer$consumption_in_month)$conf.int
+summer
+```
+
+**Note:** We took the 0.95 Confidence Intervals of water consumption in Summer and Winter. And we can see that the confidence intervals are not overlapping and Water consumption in Summer and Winter are significantly different from each ohters.
+
+
+Now let's test our hypothesis using Welch Two Sample t-test
+
+**Ho:** Mu winter = Mu summer and **H1:** Mu winter != Mu summer
+
+```{r}
+#consumption_t_test <- t.test(birthwt.grams ~ mother.smokes, data = birthwt)
+
+
+with(winter.vs.summer, t.test(x=consumption_in_month[seasons=="winter"], 
+                     y=consumption_in_month[seasons=="summer"]))
+
+```
+
+**Our p-value is less than 0.05(alpha) and also our confidence interval doesn't include 0. That's mean Water Consumption in Winter and Summer significantly different from each others. And we can reject that Mu winter is equal to Mu summer(H0)**
+
+
+
+
+
+
+
+
+
