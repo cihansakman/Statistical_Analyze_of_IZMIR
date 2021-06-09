@@ -47,7 +47,7 @@ Change the column names
 ```{r}
 colnames(water.consumption) <- c("year","month","district","neighborhood","user_count","avg_consumption")
 colnames(water.production) <- c("year","month","source","amount_m3")
-colnames(water.binding) <- c("year","district","binding_time_day","sub_time_day","explore_time_day","collection_time_day","sub_request_count")
+colnames(water.binding) <- c("year","district","binding_time_day","sub_time_day","explore_time_day","collection_time_day","petition_count")
 
 
 ```
@@ -571,14 +571,14 @@ sapply(water.binding, summary)
 ```
 
 
-###Visualize the data
+### Visualize the data
 
 - Let's take a closer look to binding time. We can explore the shape of the data and also check for the outliers
 ```{r}
 #boxplot(birthwt$birthwt.grams~birthwt$hypertension)
 
 
-qplot(x = water.binding$year, y = water.binding$binding_time_day,
+qplot(x =year, y = binding_time_day,
       geom = "boxplot", data = water.binding,
       xlab = "Year", 
       ylab = "Binding Times in Days",
@@ -586,8 +586,8 @@ qplot(x = water.binding$year, y = water.binding$binding_time_day,
 ```
 
 We can see the above boxplot explain the binding times for years. It suggest that in 2020 binding requires less time than other years and it's more symetric than others and narrower than others that is mean that standard deviation of 2020 is a bit smaller than others(Binding time doesn't change a lot). Also in 2019 it seems that the median is also same with in 2020 but the boxplot is wider that is mean the binding time changes much.
-
--Also plot the violin plot and see the difference better.
+ 
+- Also plot the violin plot and density functions to see the difference better.
 ```{r}
 base.plot <- ggplot(water.binding, aes(x = year, y = binding_time_day)) +
   xlab("Year") +
@@ -605,6 +605,7 @@ p2 <- base.plot + geom_density(aes(fill = year), alpha = 0.5)
 ggarrange(p1, p2, ncol =1, nrow = 2, labels = c( "Violing Histogram","Density"))
 
 ```
+
 As we can see from above plots our three data are right skewed but the it suggest us that the 2020 has the less binding time.
 
 - Let's discover the correlation between binding time and exploring time.
@@ -623,4 +624,183 @@ ggscatter(water.binding, x = "binding_time_day", y = "explore_time_day",
 
 ```
 
-From above plots the Pearson coefficient correlation is 0.62. We can not say there is an high correlation but also can not say there is no correlation between them.
+From above plots the Pearson coefficient correlation is 0.62. We can not say there is a high correlation but also can not say there is no correlation between them.
+
+Let's viusalize the histograms and try to see the shape of Binding Time and Exploring Time
+
+```{r}
+
+p1 <- ggplot(water.binding, aes(y = binding_time_day)) 
+# Violin plot
+p1 <- p1 + geom_boxplot(fill=I("lightblue"))
+
+
+p2 <- ggplot(water.binding, aes(y = explore_time_day))
+# Violin plot
+p2 <- p2 + geom_boxplot(fill=I("lightblue"))
+
+ggarrange(p1, p2, ncol =1, nrow = 2, labels = c( "Binding Time (day)","Exploring Time (day)"))
+
+
+p1 <- ggplot(water.binding, aes(x = binding_time_day)) +
+  xlab("Binding Times in (day)")
+# Violin plot
+p1 <- p1 + geom_histogram(fill="orange")
+
+
+p2 <- ggplot(water.binding, aes(x = explore_time_day)) +
+  xlab("Exploring Times in (day)")
+# Violin plot
+p2 <- p2 + geom_histogram(fill="orange")
+
+ggarrange(p1, p2, ncol =1, nrow = 2, labels = c( "Binding Time (day)","Exploring Time (day)"))
+
+
+
+
+```
+
+
+It seems that both *Binding Time* and *Exploring Time* are right-skewed. Let's try to transform them with log transform then visualize them again
+```{r}
+water.binding.log <- transform(water.binding, 
+            binding_time_day = log(binding_time_day),
+            explore_time_day = log(explore_time_day)
+            
+            )
+
+p1 <- ggplot(water.binding, aes(x = binding_time_day)) +
+  xlab("Binding Time in (day)")
+# Violin plot
+p1 <- p1 + geom_density(fill="orange")
+
+
+p2 <- ggplot(water.binding.log, aes(x = binding_time_day)) +
+  xlab("Binding Times in (day)")
+# Violin plot
+p2 <- p2 + geom_density(fill="orange")
+
+p3 <- ggplot(water.binding, aes(sample = binding_time_day)) + ylab("Binding Times in (day)") +
+  stat_qq() +
+  stat_qq_line()
+
+p4 <- ggplot(water.binding.log, aes(sample = binding_time_day)) + ylab("Binding Times in (day)") +
+  stat_qq() +
+  stat_qq_line()
+
+ggarrange(p1, p2, p3, p4, ncol =2, nrow = 2, labels = c( "Before Transform","After Transform",
+                                                 "Before Transform","After Transform"))
+
+shapiro.test(water.binding.log$binding_time_day)
+
+
+
+
+p1 <- ggplot(water.binding, aes(x = explore_time_day)) +
+  xlab("Explore Time in (day)")
+# Violin plot
+p1 <- p1 + geom_density(fill="orange")
+
+
+p2 <- ggplot(water.binding.log, aes(x = explore_time_day)) +
+  xlab("Explore Times in (day)")
+# Violin plot
+p2 <- p2 + geom_density(fill="orange")
+
+p3 <- ggplot(water.binding, aes(sample = explore_time_day)) + ylab("Explore Times in (day)") +
+  stat_qq() +
+  stat_qq_line()
+
+p4 <- ggplot(water.binding.log, aes(sample = explore_time_day)) + ylab("Explore Times in (day)") +
+  stat_qq() +
+  stat_qq_line()
+
+ggarrange(p1, p2, p3, p4, ncol =2, nrow = 2, labels = c( "Before Transform","After Transform",
+                                                 "Before Transform","After Transform"))
+shapiro.test(water.binding.log$explore_time_day)
+
+```
+
+It seems that after transformation *Explore Time* value became more normally distributed and *Binding Time* seems still skewed but we'll assume that both data are normally distributed.
+
+
+- Let's take a look at subscriber petition in last three years
+```{r}
+p1 <- ggplot(water.binding, aes(sample = petition_count)) + ylab("Request") +
+  stat_qq() +
+  stat_qq_line()
+
+p2 <- ggplot(water.binding, aes(y = petition_count)) +
+  xlab("Request")
+# Violin plot
+p2 <- p2 + geom_boxplot(fill=I("lightblue"))
+
+p3 <- ggplot(water.binding, aes(x = petition_count)) +
+  xlab("Request")
+# Violin plot
+p3 <- p3 + geom_density(fill=I("lightblue"))
+
+ggarrange(p1, p2, p3, ncol =3, nrow = 1, labels = c( "Before Transform","Before Transform",
+                                                 "Before Transform"))
+
+
+petition.log <- transform(water.binding, 
+            petition_count = log(petition_count))
+
+
+p1 <- ggplot(petition.log, aes(sample = petition_count)) + ylab("Request") +
+  stat_qq() +
+  stat_qq_line()
+
+p2 <- ggplot(petition.log, aes(y = petition_count)) +
+  xlab("Request")
+# Violin plot
+p2 <- p2 + geom_boxplot(fill=I("lightblue"))
+
+p3 <- ggplot(petition.log, aes(x = petition_count)) +
+  xlab("Request")
+# Violin plot
+p3 <- p3 + geom_density(fill=I("lightblue"))
+
+ggarrange(p1, p2, p3, ncol =3, nrow = 1, labels = c( "After Transform","After Transform",
+                                                 "After Transform"))
+shapiro.test(petition.log$petition_count)
+```
+
+Before the transformation our data was right skewed and we try to take log transformation and make it normally distributed but it seems that doesn't work. After that point we'll assume that our data is normally distributed.
+
+- Let's compare the confidence interval of subscriber petition in 2019 and 2020
+```{r}
+
+petition.log.2019 <- subset(petition.log, subset = year == "2019")
+petition.log.2020 <- subset(petition.log, subset = year == "2020")
+
+
+
+petition.log.2019 <- subset(petition.log, subset = year == "2019")
+
+
+#Confidence Interval of petition of 2019
+petition.log.2019.CI <- t.test(petition.log.2019$petition_count)$conf.int
+petition.log.2019.CI
+
+#Confidence Interval of petition of 2020
+petition.log.2020.CI <- t.test(petition.log.2020$petition_count)$conf.int
+petition.log.2020.CI
+```
+
+It seems that there is significant difference between petitions in 2019 and 2020. Lets test it and see it better.
+
+- We'll assume that we don't have an information about sample standard deviation then we'll use t-test.
+
+- Mu petition2019 = Mu petition2020 and H1: Mu petition2019 != Mu petition2020
+```{r}
+
+
+with(petition.log, t.test(x=petition_count[year=="2019"], 
+                     y=petition_count[year=="2020"]))
+
+
+```
+
+**According to the Welch Two Sample t-test, our p-value is 0.6425, and also the 95 percent confidence interval contains 0. That is means we can not reject that the true difference in means is equal to 0. In other words, we can not say the petition counts in 2020 and 2019 are significantly different from each other.**
