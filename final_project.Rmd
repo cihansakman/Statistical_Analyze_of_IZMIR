@@ -35,9 +35,10 @@ library(moments)
 ```{r}
 water.consumption <- read.csv("C:\\Users\\sakma\\Desktop\\R Files\\Final Project\\csv_files\\yillik-mahalle-su-tuketimi.csv", header = TRUE, encoding="UTF-8", stringsAsFactors=FALSE,sep=";")
 
-animal.food <- read.csv("C:\\Users\\sakma\\Desktop\\R Files\\Final Project\\csv_files\\dagitilan-mama-miktari.csv", header = TRUE, encoding="UTF-8", stringsAsFactors=FALSE, sep=";")
+water.binding <- read.csv("C:\\Users\\sakma\\Desktop\\R Files\\Final Project\\csv_files\\su-baglama-sureleri.csv", header = TRUE, encoding="UTF-8", stringsAsFactors=FALSE, sep=";")
 
 water.production <- read.csv("C:\\Users\\sakma\\Desktop\\R Files\\Final Project\\csv_files\\su-uretimi-kaynak-dagilimi.csv", header = TRUE, encoding="UTF-8", stringsAsFactors=FALSE,sep=";")
+
 ```
 
 ***
@@ -46,7 +47,7 @@ Change the column names
 ```{r}
 colnames(water.consumption) <- c("year","month","district","neighborhood","user_count","avg_consumption")
 colnames(water.production) <- c("year","month","source","amount_m3")
-colnames(animal.food) <- c("year","month","district","neighborhood","distributor","count","unit")
+colnames(water.binding) <- c("year","district","binding_time_day","sub_time_day","explore_time_day","collection_time_day","sub_request_count")
 
 
 ```
@@ -54,23 +55,15 @@ colnames(animal.food) <- c("year","month","district","neighborhood","distributor
 ### **Data visualization and descriptive stats**
 
 > Let's see some of data
-```{r echo=FALSE}
-paste("Water Consumption")
-head(water.consumption, 10)
-paste("Water Production")
-head(water.production, 10)
-paste("Animal Food")
-head(animal.food, 10)
-```
 
->- Summiraze all three data
+>- Summarize all three data
 ```{r echo=FALSE}
 paste("Summary of Water Consumption")
 summary(water.consumption)
 paste("Summary of Water Production")
 summary(water.production)
-paste("Summary of Animal Food")
-summary(animal.food)
+paste("Summary of Water Binding")
+summary(water.binding)
 
 ```
 
@@ -112,18 +105,24 @@ paste("Summary for Water Production after Edit")
 sapply(water.production, summary)
 
 #############
+paste("Edit for Water Binding")
 
-paste("Edit for Animal Food")
-animal.food$year = as.character(as.numeric(animal.food$year))
-animal.food$month = as.character(as.numeric(animal.food$month))
-#There is no information about neighborhood then we'll drop it
-animal.food = subset(animal.food, select = -(neighborhood) )
+water.binding$binding_time_day <- str_replace_all(water.binding$binding_time_day , ',', '.')
+water.binding$sub_time_day <- str_replace_all(water.binding$sub_time_day , ',', '.')
+water.binding$explore_time_day <- str_replace_all(water.binding$explore_time_day , ',', '.')
+water.binding$collection_time_day <- str_replace_all(water.binding$collection_time_day , ',', '.')
 
-names <- c('year' ,'month', 'district', 'distributor', 'unit')
-animal.food[,names] <- lapply(animal.food[,names] , factor)
-paste("Summary for Water Production after Edit")
-sapply(animal.food, summary)
+water.binding$binding_time_day = as.numeric(as.character(water.binding$binding_time_day))
+water.binding$sub_time_day = as.numeric(as.character(water.binding$sub_time_day))
+water.binding$explore_time_day = as.numeric(as.character(water.binding$explore_time_day))
+water.binding$collection_time_day = as.numeric(as.character(water.binding$collection_time_day))
 
+names <- c('year' ,'district')
+water.binding[,names] <- lapply(water.binding[,names] , factor)
+
+paste("Summary for Water Binding after Edit")
+head(water.binding,20)
+sapply(water.binding, summary)
 
 ```
 
@@ -161,37 +160,16 @@ df1 <- df1 %>% slice_max(total_consumption, n = 5)
 
 ```
 
-- Show the most crowded districts.
-```{r  message = FALSE, warning=FALSE}
-#We can see the most consumer districts in 2020 in Izmir.
-df <- consumption.2020 %>% 
-  group_by(district) %>% 
-  summarize(total_user = sum(user_count))
 
-df <- df %>%
-  arrange(desc(total_user))
 
-df %>% tbl_df %>% print(n=40)
-
-df <- df %>% slice_max(total_user, n = 5)
-
-```
-
--Now take a closer look at most crowded districts and most consumer districts.
+- Top 5 consumer districts in Izmir
 ```{r}
-p1<-ggplot(data=df, aes(x=reorder(district, -total_user), y=total_user)) +
+p<-ggplot(data=df1, aes(x=reorder(district, -total_consumption), y=total_consumption)) +
   geom_bar(stat="identity", fill="orange")
 
-p1 <- p1 + labs(title = "Most 5 Crowded Districts", x='District', y='Total User in a Year')
+p <- p + labs(title = "Most 5 Consumer Districts", x='District', y='Total Consumption(m^3/10^3)')
+p
 
-
-
-p2<-ggplot(data=df1, aes(x=reorder(district, -total_consumption), y=total_consumption)) +
-  geom_bar(stat="identity", fill="orange")
-
-p2 <- p2 + labs(title = "Most 5 Consumer Districts", x='District', y='Total Consumption(m^3/10^3)')
-
-ggarrange(p1, p2, ncol =1, nrow = 2)
 
 ```
 
@@ -231,7 +209,45 @@ summary_data
 
 **Note:** It seems that there are some mistakes in data for 4th and 5th months.
 
-- Is water consumption correlated with user count of districts?
+**Is water consumption correlated with user count of districts?**
+
+
+- Show the most crowded districts.
+```{r  message = FALSE, warning=FALSE}
+#We can see the most consumer districts in 2020 in Izmir.
+df <- consumption.2020 %>% 
+  group_by(district) %>% 
+  summarize(total_user = sum(user_count))
+
+df <- df %>%
+  arrange(desc(total_user))
+
+df %>% tbl_df %>% print(n=40)
+
+df <- df %>% slice_max(total_user, n = 5)
+
+```
+
+- Take a closer look at most crowded districts and most consumer districts.
+```{r}
+
+p1<-ggplot(data=df, aes(x=reorder(district, -total_user), y=total_user)) +
+  geom_bar(stat="identity", fill="orange")
+
+p1 <- p1 + labs(title = "Most 5 Crowded Districts", x='District', y='Total User in a Year')
+
+
+
+p2<-ggplot(data=df1, aes(x=reorder(district, -total_consumption), y=total_consumption)) +
+  geom_bar(stat="identity", fill="orange")
+
+p2 <- p2 + labs(title = "Most 5 Consumer Districts", x='District', y='Total Consumption(m^3/10^3)')
+
+ggarrange(p1, p2, ncol =1, nrow = 2)
+
+
+
+```
 
 - Let's see how consumption changes with the number of users.
 
@@ -375,9 +391,6 @@ Now let's test our hypothesis using Welch Two Sample t-test
 **Ho:** Mu winter = Mu summer and **H1:** Mu winter != Mu summer
 
 ```{r}
-#consumption_t_test <- t.test(birthwt.grams ~ mother.smokes, data = birthwt)
-
-
 with(winter.vs.summer, t.test(x=consumption_in_month[seasons=="winter"], 
                      y=consumption_in_month[seasons=="summer"]))
 
@@ -385,11 +398,229 @@ with(winter.vs.summer, t.test(x=consumption_in_month[seasons=="winter"],
 
 **Our p-value is less than 0.05(alpha) and also our confidence interval doesn't include 0. That's mean Water Consumption in Winter and Summer significantly different from each others. And we can reject that Mu winter is equal to Mu summer(H0)**
 
+***
+
+# WATER PRODUCTION
+
+***
+
+- Let's see the data again
+```{r}
+head(water.production,10)
+sapply(water.production, summary)
+
+```
+
+**Note:** There are no sufficiant information about the water production of 2021. Therefore we'll dismiss it.
+```{r}
+water.production = subset(water.production, subset = water.production$year != "2021")
+sapply(water.production, summary)
+
+```
+- Take a look at the most productive Sources
+```{r}
+#We can see the most consumer districts in 2020 in Izmir.
+df1 <- water.production %>% 
+  group_by(source) %>% 
+  summarize(total_amount = sum(amount_m3))
+
+df1 <- df1 %>%
+  arrange(desc(total_amount))
+
+df1 %>% tbl_df %>% print(n=40)
+
+```
+
+
+- Top 5 productive sources in Izmir
+```{r  message = FALSE, warning=FALSE}
+df1 <- df1 %>% slice_max(total_amount, n = 5)
+p<-ggplot(data=df1, aes(x=reorder(source, -total_amount), y=total_amount)) +
+  geom_bar(stat="identity", fill="orange")
+
+p <- p + labs(title = "Most 5 Productive Sources", x='Source', y='Total Produce(m^3)')
+p
+```
+
+#### It seems that the most productive source is Tahtali Baraji.
+
+Let's take a look how the water production changes year by yea in Tahtali Baraji.
+
+-First take the Tahtali Baraji's data.
+
+**Note:** amount_m3 divided by 1000 to see the numbers better.
+```{r}
+water.production.tahtali = subset(water.production, subset = water.production$source == "Tahtalı Barajı")
+water.production.tahtali$amount_m3 = water.production.tahtali$amount_m3 / 10**3
+sapply(water.production.tahtali, summary)
+
+p<-ggplot(data=water.production.tahtali, aes(x=year, y=amount_m3)) +
+  geom_bar(stat="identity", fill="orange")
+
+p
 
 
 
+```
+
+Histograms of Water Production in Tahtali
+```{r}
+par(mfrow = c(2,3)) # Display plots in a single 2 x 2 figure 
+plot(water.production.tahtali$amount_m3)
+with(water.production.tahtali, hist(amount_m3))
+with(water.production.tahtali, boxplot(amount_m3))
+plot(water.production.tahtali$amount_m3, water.production.tahtali$year)
+qqnorm(water.production.tahtali$amount_m3)
+qqline(water.production.tahtali$amount_m3)
+plot(density(water.production.tahtali$amount_m3))
+
+#hist(flu$age, right = FALSE, breaks = seq(0,102,2), col = "firebrick", las = 1, xlab = "Age at death (yrs)", ylab = "Frequency", main = "")
+
+```
+
+**Note:** It seems that we have bimodal distribution. It means that there should be different classes. Therefore we'll divide our data into two groups: *Water Consumpiton Before 2015* and *Water Consumption After 2015* and then we'll plot again.
+
+```{r}
+water.production.tahtali$year = as.numeric(as.character(water.production.tahtali$year))
+water.production.tahtali$seasons = cut(water.production.tahtali$year,c(2008,2014,2020))
+levels(water.production.tahtali$seasons) = c("before_2015","after_2015")
+
+#Divide data into two different classes. before.2015 and after.2015
+tahtali.before.2015 =subset(water.production.tahtali, subset = water.production.tahtali$seasons == "before_2015")
+tahtali.after.2015 =subset(water.production.tahtali, subset = water.production.tahtali$seasons == "after_2015")
+
+
+par(mfrow= c(1,2))
+plot(density(tahtali.before.2015$amount_m3), main = "Before 2015")
+plot(density(tahtali.after.2015$amount_m3), main="After 2015")
 
 
 
+par(mfrow = c(2,2)) # Display plots in a single 2 x 2 figure 
+with(tahtali.before.2015, hist(amount_m3),main = "Water Prod. Tahtali Before 2015")
+with(tahtali.before.2015, boxplot(amount_m3),main = "Water Prod. Tahtali Before 2015")
+qqnorm(tahtali.before.2015$amount_m3)
+qqline(tahtali.before.2015$amount_m3)
+plot(density(tahtali.before.2015$amount_m3),main = "Water Prod. Tahtali Before 2015")
+shapiro.test(tahtali.before.2015$amount_m3)
+
+par(mfrow = c(2,2)) # Display plots in a single 2 x 2 figure 
+with(tahtali.after.2015, hist(amount_m3),main = "Water Prod. Tahtali After 2015")
+with(tahtali.after.2015, boxplot(amount_m3),main = "Water Prod. Tahtali After 2015")
+qqnorm(tahtali.after.2015$amount_m3)
+qqline(tahtali.after.2015$amount_m3)
+plot(density(tahtali.after.2015$amount_m3),main = "Water Prod. Tahtali After 2015")
+shapiro.test(tahtali.after.2015$amount_m3)
+```
+
+**Note:** After that point *Water Production in Tahtali After 2015* seems normally distributed by the above plots and also from the Shapiro Test. Our p value > 0.05 and that's mean we can not reject that data are not significantly different from normal distribution, but *Water Production in Tahtali Before 2015* doesn't look like normally distributed and we'll assume that both of them are normally distributed.
 
 
+###Let's compare the Confidence Intervals.
+
+- Our confidince coefficient is 0.95 it's mean that our sample means are appear between Confidince Interval by 95%.
+
+- Confidence Interval of Water Production Before 2015 in Tahtali Baraji
+```{r}
+before.2015.CI <- t.test(tahtali.before.2015$amount_m3)$conf.int
+before.2015.CI
+```
+
+For the Water Production in Tahtali Baraji before 2015, 95% of the sample means between the 5291.162 and 5717.806. If we transformed the data again that's mean %95 percentage of the sample means between  5291000.162 m3  and 5717000.806 m3 water.
+
+
+- Confidence Interval of Water Production After 2015 in Tahtali Baraji.
+```{r}
+after.2015.CI <- t.test(tahtali.after.2015$amount_m3)$conf.int
+after.2015.CI
+```
+
+For the Water Production in Tahtali Baraji after 2015, 95% of the sample means between the 7075.987 7557.701. If we transformed the data again that's mean %95 percentage of the sample means between 7075000.987 m3 and 7557000.701 m3 water.
+
+***
+
+**Note:** Confidence intervals suggest that the Water Production between *Before 2015* and *After 2015* are significantly different from each others.
+
+***
+
+Now let's test our hypothesis using Welch Two Sample t-test
+
+**Ho:** Mu before_2015 = Mu after_2015 and **H1:** Mu before_2015 != Mu after_2015
+
+```{r}
+with(water.production.tahtali, t.test(x=amount_m3[seasons=="before_2015"], 
+                     y=amount_m3[seasons=="after_2015"]))
+
+```
+
+**Our p-value is less than 0.05(alpha) and also our confidence interval doesn't include 0. That's mean Water Production after 2015 and before 2015 are significantly different from each others. And we can reject that Mu before_2015 is equal to Mu after_2015(H0). Also we can conclude that from the Confidence Intervals, Tahtali Baraji is much more productive after 2015.**
+
+
+
+***
+
+# WATER BINDING
+
+***
+
+- Let's see the data again
+```{r}
+head(water.binding,10)
+sapply(water.binding, summary)
+
+```
+
+
+###Visualize the data
+
+- Let's take a closer look to binding time. We can explore the shape of the data and also check for the outliers
+```{r}
+#boxplot(birthwt$birthwt.grams~birthwt$hypertension)
+
+
+qplot(x = water.binding$year, y = water.binding$binding_time_day,
+      geom = "boxplot", data = water.binding,
+      xlab = "Year", 
+      ylab = "Binding Times in Days",
+      fill = I("lightblue"))
+```
+
+We can see the above boxplot explain the binding times for years. It suggest that in 2020 binding requires less time than other years and it's more symetric than others and narrower than others that is mean that standard deviation of 2020 is a bit smaller than others(Binding time doesn't change a lot). Also in 2019 it seems that the median is also same with in 2020 but the boxplot is wider that is mean the binding time changes much.
+
+-Also plot the violin plot and see the difference better.
+```{r}
+base.plot <- ggplot(water.binding, aes(x = year, y = binding_time_day)) +
+  xlab("Year") +
+  ylab("Binding Times in (day)")
+# Violin plot
+p1 <- base.plot + geom_violin()
+
+
+
+#Density functions
+base.plot <- ggplot(water.binding, aes(x = binding_time_day)) +
+  xlab("Binding Time (day)")
+p2 <- base.plot + geom_density(aes(fill = year), alpha = 0.5)
+
+ggarrange(p1, p2, ncol =1, nrow = 2, labels = c( "Violing Histogram","Density"))
+
+```
+As we can see from above plots our three data are right skewed but the it suggest us that the 2020 has the less binding time.
+
+- Let's discover the correlation between binding time and exploring time.
+```{r}
+
+
+p <- ggplot(data=water.binding, aes(x=binding_time_day, y=explore_time_day))  + geom_point() 
+p + labs(title = "Change of Subscriber Request With Water Binding Time", x='Binding Time in Days', y='Subscriber Request ')
+
+
+ggscatter(water.binding, x = "binding_time_day", y = "explore_time_day", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Bindin Time (day)", ylab = "Explore Time")
+
+
+```
+
+From above plots the Pearson coefficient correlation is 0.62. We can not say there is an high correlation but also can not say there is no correlation between them.
