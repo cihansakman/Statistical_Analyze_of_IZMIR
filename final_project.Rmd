@@ -272,17 +272,17 @@ p3 <- base.plot + geom_density()
 
 ggarrange(p1, p2, p3, ncol =2, nrow = 2, labels = c( "Geom Histogram","Boxplot","Density"))
 
-#It seems that we have a right skewed data. Let's see the skewness rate of the data
+#It seems that we have a right skewed data. Let's see the Shapiro Test
 skewness(consumption.2020$consumption_in_month, na.rm = TRUE)
 ```
 
 
 
-- We'll have square root(double) transform for transform right skewed data to normally distributed data.
+- We'll have log transform for transform right skewed data to normally distributed data.
 
 ```{r}
 consumption.2020.transform <- transform(consumption.2020, 
-            consumption_in_month = sqrt(sqrt(consumption_in_month)))
+            consumption_in_month = log(consumption_in_month))
             
 
 
@@ -297,36 +297,26 @@ p3 <- base.plot + geom_density()
 
 ggarrange(p1, p2, p3, ncol =2, nrow = 2, labels = c( "Geom Histogram","Boxplot","Density"))
 
-#It seems that we did a good job and transformed the data to normally distributed. Now take look at skewness rate again
+#It seems that log transformation didn't work for transform the data to normally distributed. Now take look at skewness rate again
 skewness(consumption.2020.transform$consumption_in_month, na.rm = TRUE)
 
-
-
-p <- ggplot(data=consumption.2020.transform, aes(x=consumption_in_month, y=user_count))  + geom_point() 
-p + labs(title = "Change of Consumpiton With User Count", x='Avg Consumption', y='User Count')
-
-#Now take a look for correlation between water consumption and user count after making data normally distriubted
-cor(consumption.2020.transform$consumption_in_month,consumption.2020$user_count)
-
-#It's still seem that there is high correlation between consumption and user count
 ```
 
+**From now on we'll assume that our data is normally distributed**
 
 ### **Confidence Intervals**
 
 #### Let's take the Water Consumption of 2020 and compare the consumption based on winter and summer
 
-**Note:** Don't forget that we're working on the transformed data!
-
 - First we'll categorize the months and just looking at the winter and summer
 ```{r}
-consumption.2020.transform$month = as.numeric(as.character(consumption.2020.transform$month))
-consumption.2020.transform$seasons = cut(consumption.2020.transform$month,c(0,2,5,8,11,12))
-levels(consumption.2020.transform$seasons) = c("winter","spring","summer","autumn","winter")
+consumption.2020$month = as.numeric(as.character(consumption.2020$month))
+consumption.2020$seasons = cut(consumption.2020$month,c(0,2,5,8,11,12))
+levels(consumption.2020$seasons) = c("winter","spring","summer","autumn","winter")
 #select(consumption.2020, month, seasons)
 
 #subset the winter and summer
-winter.vs.summer = subset(consumption.2020.transform, subset = consumption.2020.transform$seasons == "winter" | consumption.2020.transform$seasons == "summer" )
+winter.vs.summer = subset(consumption.2020, subset = consumption.2020$seasons == "winter" | consumption.2020$seasons == "summer" )
 summary(winter.vs.summer)
 
 qplot(x = seasons, y = consumption_in_month,
@@ -336,21 +326,12 @@ qplot(x = seasons, y = consumption_in_month,
       fill = I("lightblue"))
 ```
 
-**The boxplot suggest that winter is associated with less water consumption.**
+**The boxplot suggest that winter is associated with less water consumption. There are lots of outliers because of our data is right skewed.**
 
 
-Let's compute a summary table and see it better. *(Don't forget that these values are transformed)*
+Let's compute a summary table and see it better.
 
 ```{r}
-
-#data.for.summary.table <- transform(winter.vs.summer, 
- #           consumption_in_month = (consumption_in_month)**4)
-            
-
-
-#aggregate(consumption_in_month ~ seasons, 
-        #  data = data.for.summary.table, 
-        #  FUN = function(x) {c(mean = mean(x), sd = sd(x))})
 
 aggregate(consumption_in_month ~ seasons, 
           data = winter.vs.summer, 
@@ -385,18 +366,203 @@ summer
 
 **Note:** We took the 0.95 Confidence Intervals of water consumption in Summer and Winter. And we can see that the confidence intervals are not overlapping and Water consumption in Summer and Winter are significantly different from each ohters.
 
+Before going for a t-test let's check if the variance of two groups are equal with F-test.
+```{r}
+res.ftest <- var.test(consumption_in_month ~ seasons, data = winter.vs.summer)
+res.ftest
+paste("p-value of F-test smaller than alpha(0.05) that mean variances of two sets of data are different. But we'll assume that the variences are equal.")
+```
 
 Now let's test our hypothesis using Welch Two Sample t-test
 
 **Ho:** Mu winter = Mu summer and **H1:** Mu winter != Mu summer
 
 ```{r}
-with(winter.vs.summer, t.test(x=consumption_in_month[seasons=="winter"], 
-                     y=consumption_in_month[seasons=="summer"]))
+winter.summer.t.test <- with(winter.vs.summer, t.test(x=consumption_in_month[seasons=="summer"], 
+                     y=consumption_in_month[seasons=="winter"]))
+winter.summer.t.test
+
+# Calculate difference in means between smoking and nonsmoking groups
+winter.summer.diff <- round(((winter.summer.t.test$estimate[1])*1000) - ((winter.summer.t.test$estimate[2])*1000), 1)
+
+# Confidence level as a %
+conf.level <- attr(winter.summer.t.test$conf.int, "conf.level") * 100
 
 ```
 
-**Our p-value is less than 0.05(alpha) and also our confidence interval doesn't include 0. That's mean Water Consumption in Winter and Summer significantly different from each others. And we can reject that Mu winter is equal to Mu summer(H0)**
+**Results**: Our study finds that water consumptions are on average `r winter.summer.diff`m^3^ higher in the Summer compared to the Winter (t-statistic `r round(winter.summer.t.test$statistic,2)`, p=`r round(winter.summer.t.test$p.value, 3)`, `r conf.level`% CI [`r round(winter.summer.t.test$conf.int,1)`]m^3^ / 10^3^)
+
+
+**Conclusion:**Our p-value is less than 0.05(alpha) and also our confidence interval doesn't include 0. That's mean Water Consumption in Winter and Summer significantly different from each others. And we can reject that Mu winter is equal to Mu summer(H0)
+
+***
+
+- Now let's look at the mean water consumption of Buca in 2020 is more than 25(25000m3) or not.
+
+Summarize the water consumption.
+```{r}
+summary(consumption.2020$consumption_in_month)
+paste("It seems that mean consumption in month for 2020 is 10.32(10320m3)")
+
+
+consumption.2020.buca = subset(consumption.2020, subset = consumption.2020$district == "BUCA")
+
+paste("Print the confidence interval for Buca's total consumption")
+buca.CI <- t.test(consumption.2020.buca$consumption_in_month)$conf.int
+buca.CI
+
+```
+It seems that sample means of Buca water consumption is 95% between the 27.25(27250m^3^) and 31.54(31540m^3^).
+
+Let's test the hypothesis and see the result statistically.
+
+- **H0:** Mu <= 25, **H1:** Mu > 25
+
+```{r}
+
+buca.cons.t.test<- t.test(consumption.2020.buca$consumption_in_month, alternative = c("greater"), mu = 25, conf.level = 0.95)
+buca.cons.t.test
+
+conf.level <- attr(buca.cons.t.test$conf.int, "conf.level") * 100
+```
+
+**Result:**Our study finds that water consumption for Buca in 2020 are on average, (t-statistic `r round(buca.cons.t.test$statistic,2)`, p=`r round(buca.cons.t.test$p.value, 3)`, CI: `r conf.level`% CI [`r round(buca.cons.t.test$conf.int,1)`]m3)
+
+
+**Conclusion:** p-value is almost zero and it's less than alpha(0.05). That's mean we can reject H0 which says that average mean of water consumption of Buca in 2020 is less or equal than 25000m3. In other words we can conclude that the avg mean of water consumption of Buca in 2020 is greater than 25000m3.
+
+***
+
+From the most 5 crowded districts Buca and Karabağlar are the districts which has most users. Lets test them if the mean user count of  Buca more than Karabağlar or not. First visualize the histogram and check the shape of data.
+
+
+```{r}
+
+buca.karabag = subset(consumption.2020, subset = consumption.2020$district == "BUCA" | consumption.2020$district == "KARABAĞLAR" )
+summary(buca.karabag)
+
+paste("Let's seperate them and see the shapes better")
+
+buca = subset(buca.karabag, subset = buca.karabag$district == "BUCA")
+karabag = subset(buca.karabag, subset = buca.karabag$district == "KARABAĞLAR")
+paste("Summary for Buca")
+summary(buca)
+paste("Summary of Karabağ")
+summary(karabag)
+
+
+paste("Draw the histgorams and see the shape of them")
+
+
+p1 <- ggplot(buca, aes(x = user_count)) +
+  xlab("User Count of Karşıyaka")
+# Violin plot
+p1 <- p1 + geom_histogram(fill="orange")
+
+
+p2 <- ggplot(karabag, aes(x = user_count)) +
+  xlab("User Count of Konak")
+# Violin plot
+p2 <- p2 + geom_histogram(fill="orange")
+
+ggarrange(p1, p2, ncol =1, nrow = 2, labels = c( "Buca User Count","Karabağ User Count)"))
+
+
+paste("Check for the outliers")
+p1 <- ggplot(buca, aes(y = user_count)) +
+  xlab("User Count of Buca")
+# Violin plot
+p1 <- p1 + geom_boxplot(fill="orange")
+
+
+p2 <- ggplot(karabag, aes(y = user_count)) +
+  xlab("User Count of Karabağlar")
+# Violin plot
+p2 <- p2 + geom_boxplot(fill="orange")
+
+ggarrange(p1, p2, ncol =1, nrow = 2, labels = c( "Buca User Count","Karabağ User Count)"))
+
+
+
+with(buca, shapiro.test(user_count))# p < 0.05
+with(karabag, shapiro.test(user_count))# p < 0.05
+
+
+```
+
+It seems that both data is right skewed. Let's try log transformation and look data again.
+```{r}
+
+buca.log <- transform(buca, 
+            user_count = log(user_count))
+
+karabag.log <- transform(karabag, 
+            user_count = log(user_count))
+
+p1 <- ggplot(buca.log, aes(x = user_count)) +
+  xlab("User Count of Buca")
+# Violin plot
+p1 <- p1 + geom_density(fill="orange")
+
+
+p2 <- ggplot(karabag.log, aes(x = user_count)) +
+  xlab("User Count of Karabaglar")
+# Violin plot
+p2 <- p2 + geom_density(fill="orange")
+
+
+p3 <- ggplot(buca.log, aes(sample = user_count)) + ylab("Buca User Counts") +
+  stat_qq() +
+  stat_qq_line()
+
+p4 <- ggplot(karabag.log, aes(sample = user_count)) + ylab("Karabaglar User Counts") +
+  stat_qq() +
+  stat_qq_line()
+
+
+ggarrange(p1, p3, p2, p4, ncol =2, nrow = 2, labels = c( "Transformed Buca User Count","Transformed Buca User Count","Transformed Karabaglar User Count","Transformed Karabaglar User Count"))
+
+with(buca.log, shapiro.test(user_count))# p < 0.05
+with(karabag.log, shapiro.test(user_count))# p < 0.05
+
+```
+
+It seems that we failed to normally distribute our data and from now on we'll assume that our data normally distributed. Now take a look at the confidence intervals of Buca's and Karabaglar's user counts.
+
+```{r}
+buca.CI <- t.test(buca$user_count)$conf.int
+buca.CI
+
+karabag.CI <- t.test(karabag$user_count)$conf.int
+karabag.CI
+
+```
+
+It seems that these two districts are significantly different from each other and Buca's mean of user counts more than Karabağlar. Let's test them and see the difference better. Before test it we'll first have F-test to see if their variance are same or not.
+```{r}
+res.ftest <- var.test(buca$user_count,karabag$user_count)
+res.ftest
+
+paste("p-value of F-test smaller than alpha(0.05) that mean variances of two sets of data are different. But we'll assume that the variences are equal.")
+```
+**H0:** Mu user_count_Buca <= Mu user_count_Karabag, **H1:**Mu user_count_Buca > Mu user_count_Karabag
+
+```{r}
+
+buca.karabag.t.test <- t.test(buca$user_count, karabag$user_count, var.equal = TRUE, alternative = "greater")
+buca.karabag.t.test
+# Calculate difference in means between smoking and nonsmoking groups
+user.count.diff <- round(buca.karabag.t.test$estimate[1] - buca.karabag.t.test$estimate[2], 1)
+
+# Confidence level as a %
+conf.level <- attr(buca.karabag.t.test$conf.int, "conf.level") * 100
+
+```
+
+**Results**: Our study finds that user counts are on average `r user.count.diff`person higher in the Buca compared to the Karabağlar (t-statistic `r round(buca.karabag.t.test$statistic,2)`, p=`r round(buca.karabag.t.test$p.value, 3)`, `r conf.level`% CI [`r round(buca.karabag.t.test$conf.int,1)`]person)
+
+**Conclusion**: Our p-value is too close to 0 and smaller than alpha(0.05) therefore we can reject that average user count of Buca less than Karabağlar. In other words, average user count of Buca higher than Karabağlar.
+
 
 ***
 
@@ -516,7 +682,7 @@ shapiro.test(tahtali.after.2015$amount_m3)
 **Note:** After that point *Water Production in Tahtali After 2015* seems normally distributed by the above plots and also from the Shapiro Test. Our p value > 0.05 and that's mean we can not reject that data are not significantly different from normal distribution, but *Water Production in Tahtali Before 2015* doesn't look like normally distributed and we'll assume that both of them are normally distributed.
 
 
-###Let's compare the Confidence Intervals.
+### Let's compare the Confidence Intervals.
 
 - Our confidince coefficient is 0.95 it's mean that our sample means are appear between Confidince Interval by 95%.
 
@@ -526,7 +692,7 @@ before.2015.CI <- t.test(tahtali.before.2015$amount_m3)$conf.int
 before.2015.CI
 ```
 
-For the Water Production in Tahtali Baraji before 2015, 95% of the sample means between the 5291.162 and 5717.806. If we transformed the data again that's mean %95 percentage of the sample means between  5291000.162 m3  and 5717000.806 m3 water.
+For the Water Production in Tahtali Baraji before 2015, 95% of the sample means between the 5291.162 and 5717.806. If we transformed the data again that's mean %95 percentage of the sample means between  5291000.162 m^3^  and 5717000.806 m^3^ water.
 
 
 - Confidence Interval of Water Production After 2015 in Tahtali Baraji.
@@ -535,7 +701,7 @@ after.2015.CI <- t.test(tahtali.after.2015$amount_m3)$conf.int
 after.2015.CI
 ```
 
-For the Water Production in Tahtali Baraji after 2015, 95% of the sample means between the 7075.987 7557.701. If we transformed the data again that's mean %95 percentage of the sample means between 7075000.987 m3 and 7557000.701 m3 water.
+For the Water Production in Tahtali Baraji after 2015, 95% of the sample means between the 7075.987 7557.701. If we transformed the data again that's mean %95 percentage of the sample means between 7075000.987 m^3^ and 7557000.701 m^3^ water.
 
 ***
 
@@ -543,19 +709,124 @@ For the Water Production in Tahtali Baraji after 2015, 95% of the sample means b
 
 ***
 
+Before going for a t-test let's check if the variance of two groups are equal with F-test.
+```{r}
+res.ftest <- var.test(amount_m3 ~ seasons, data = water.production.tahtali)
+res.ftest
+paste("p-value of F-test greater than alpha(0.05) that means there is no significant difference between the variances of the two sets. Therefore we can continue with the t-test")
+```
+
+
 Now let's test our hypothesis using Welch Two Sample t-test
 
 **Ho:** Mu before_2015 = Mu after_2015 and **H1:** Mu before_2015 != Mu after_2015
 
 ```{r}
-with(water.production.tahtali, t.test(x=amount_m3[seasons=="before_2015"], 
-                     y=amount_m3[seasons=="after_2015"]))
+tahtali.t.test <- with(water.production.tahtali, t.test(x=amount_m3[seasons=="after_2015"], 
+                     y=amount_m3[seasons=="before_2015"]))
 
+before.after.2015.diff <- round((tahtali.t.test$estimate[1] - tahtali.t.test$estimate[2]), 1)
+
+# Confidence level as a %
+conf.level <- attr(tahtali.t.test$conf.int, "conf.level") * 100
 ```
+
+
+**Results**: Our study finds that water productions are on average `r before.after.2015.diff`m^3^/10^3^ higher After 2015 compared to the Before 2015 (t-statistic `r round(tahtali.t.test$statistic,2)`, p=`r round(tahtali.t.test$p.value, 3)`, `r conf.level`% CI [`r round(tahtali.t.test$conf.int,1)`]m^3^ / 10^3^)
+
+
 
 **Our p-value is less than 0.05(alpha) and also our confidence interval doesn't include 0. That's mean Water Production after 2015 and before 2015 are significantly different from each others. And we can reject that Mu before_2015 is equal to Mu after_2015(H0). Also we can conclude that from the Confidence Intervals, Tahtali Baraji is much more productive after 2015.**
 
+***
 
+Menemen - Çavuşköy Kuyuları and Sarıkız Kuyuları seems to produce almost same. Let's discover if our hypothesis is statistically true or not.
+
+- First visualize the data and check for the normality.
+```{r}
+
+production.menemen = subset(water.production, subset = water.production$source == "Menemen - Çavuşköy Kuyuları")
+production.sarikiz = subset(water.production, subset = water.production$source == "Sarıkız Kuyuları")
+
+production.menemen$amount_m3 = production.menemen$amount_m3 / 10**3
+production.sarikiz$amount_m3 = production.sarikiz$amount_m3 / 10**3
+
+p1 <- ggplot(production.menemen, aes(sample = amount_m3)) + ylab("Production amount(m3/ 1000)") +
+  stat_qq() +
+  stat_qq_line()
+
+p2 <- ggplot(production.sarikiz, aes(sample = amount_m3)) + ylab("Production amount(m3/ 1000)") +
+  stat_qq() +
+  stat_qq_line()
+
+
+
+ggarrange(p1, p2, ncol =2, nrow = 1, labels = c( "QNorm of Menemen","QNorm of Sarikiz"))
+
+
+p1 <- ggplot(production.menemen, aes(y = amount_m3))
+p1 <- p1 + geom_boxplot(fill=I("lightblue"))
+
+p2 <- ggplot(production.sarikiz, aes(y = amount_m3))
+p2 <- p2 + geom_boxplot(fill=I("lightblue"))
+
+
+ggarrange(p1, p2, ncol =2, nrow = 1, labels = c( "Boxplot of Menemen","Boxplot of Sarikiz"))
+
+
+
+shapiro.test(production.menemen$amount_m3)
+shapiro.test(production.sarikiz$amount_m3)
+```
+
+**Note:** It seems that in Sarikiz data there lot's of outliers and missing information. We'll just take the positive values for amount_m3 and plot the boxplot again.
+```{r}
+
+production.sarikiz = subset(production.sarikiz, subset = production.sarikiz$amount_m3 > 0)
+p1 <- ggplot(production.menemen, aes(y = amount_m3))
+p1 <- p1 + geom_boxplot(fill=I("lightblue"))
+
+p2 <- ggplot(production.sarikiz, aes(y = amount_m3))
+p2 <- p2 + geom_boxplot(fill=I("lightblue")) 
+
+
+ggarrange(p1, p2, ncol =2, nrow = 1, labels = c( "Boxplot of Menemen","Boxplot of Sarikiz"))
+
+min(production.menemen$amount_m3)
+min(production.sarikiz$amount_m3)
+max(production.sarikiz$amount_m3)
+
+```
+There are still outliers for Menemen and Sarikiz. We'll remove the outliers and plot the data again.
+```{r}
+min.menemen <- min(production.menemen$amount_m3)
+min.sarikiz <- min(production.sarikiz$amount_m3)
+max.sarikiz <- max(production.sarikiz$amount_m3)
+
+
+production.menemen.outlier <- subset(production.menemen, subset = production.menemen$amount_m3 > 900)
+production.sarikiz.outlier <- subset(production.sarikiz, subset = production.sarikiz$amount_m3 < 2200 & production.sarikiz$amount_m3 > 1400)
+
+
+p1 <- ggplot(production.menemen.outlier, aes(y = amount_m3))
+p1 <- p1 + geom_boxplot(fill=I("lightblue"))
+
+p2 <- ggplot(production.sarikiz.outlier, aes(y = amount_m3))
+p2 <- p2 + geom_boxplot(fill=I("lightblue")) 
+
+
+ggarrange(p1, p2, ncol =2, nrow = 1, labels = c( "Boxplot of Menemen","Boxplot of Sarikiz"))
+
+
+```
+We almost remove all the outliers and the above boxplot suggests that Menemen Kuyulari produce less water than Sarikiz Kuyulari. Now we can check for normality test.
+
+From Shapiro Test our p-values for two data is less than alpha(0.05) than we reject that our sets of data normally distributed. Let's try square root transformation.
+```{r}
+
+shapiro.test(production.menemen.outlier$amount_m3)
+shapiro.test(production.sarikiz.outlier$amount_m3)
+```
 
 ***
 
