@@ -282,7 +282,7 @@ skewness(consumption.2020$consumption_in_month, na.rm = TRUE)
 
 ```{r}
 consumption.2020.transform <- transform(consumption.2020, 
-            consumption_in_month = log(consumption_in_month))
+            consumption_in_month = log10(consumption_in_month))
             
 
 
@@ -291,7 +291,7 @@ base.plot <- ggplot(consumption.2020.transform, aes(x = consumption_in_month)) +
 
 
 p1 <- base.plot + geom_histogram()
-p2 <- base.plot + geom_boxplot()
+p2 <-ggplot(consumption.2020.transform, aes(y = consumption_in_month)) + geom_boxplot()
 p3 <- base.plot + geom_density()
 
 
@@ -779,7 +779,7 @@ shapiro.test(production.menemen$amount_m3)
 shapiro.test(production.sarikiz$amount_m3)
 ```
 
-**Note:** It seems that in Sarikiz data there lot's of outliers and missing information. We'll just take the positive values for amount_m3 and plot the boxplot again.
+**Note:** It seems that in Sarikiz data there are lot's of outliers and missing information. We'll just take the positive values for amount_m3 and plot the boxplot again.
 ```{r}
 
 production.sarikiz = subset(production.sarikiz, subset = production.sarikiz$amount_m3 > 0)
@@ -792,20 +792,23 @@ p2 <- p2 + geom_boxplot(fill=I("lightblue"))
 
 ggarrange(p1, p2, ncol =2, nrow = 1, labels = c( "Boxplot of Menemen","Boxplot of Sarikiz"))
 
-min(production.menemen$amount_m3)
-min(production.sarikiz$amount_m3)
-max(production.sarikiz$amount_m3)
-
 ```
-There are still outliers for Menemen and Sarikiz. We'll remove the outliers and plot the data again.
+There are still outliers for Menemen and Sarikiz. We'll remove the outliers and plot the data again. We'll use the Iner Quartile Range for detecting outliers. And an outlier would be a point below [Q1- (1.5)IQR] or above [Q3+(1.5)IQR].
 ```{r}
-min.menemen <- min(production.menemen$amount_m3)
-min.sarikiz <- min(production.sarikiz$amount_m3)
-max.sarikiz <- max(production.sarikiz$amount_m3)
+Q.menemen <- quantile(production.menemen$amount_m3, probs=c(.25, .75), na.rm = FALSE)
+Q.sarikiz <- quantile(production.sarikiz$amount_m3, probs=c(.25, .75), na.rm = FALSE)
+
+iqr.menemen <- IQR(production.menemen$amount_m3)
+iqr.sarikiz <- IQR(production.sarikiz$amount_m3)
+
+low.menemen<- Q.menemen[1]-1.5*iqr.menemen # Lower Range of Menemen
+
+up.sarikiz <-  Q.sarikiz[2]+1.5*iqr.sarikiz # Upper Range of Sarikiz
+low.sarikiz<- Q.sarikiz[1]-1.5*iqr.sarikiz # Lower Range of Sarikiz
 
 
-production.menemen.outlier <- subset(production.menemen, subset = production.menemen$amount_m3 > 900)
-production.sarikiz.outlier <- subset(production.sarikiz, subset = production.sarikiz$amount_m3 < 2200 & production.sarikiz$amount_m3 > 1400)
+production.menemen.outlier <- subset(production.menemen, subset = production.menemen$amount_m3 > low.menemen)
+production.sarikiz.outlier <- subset(production.sarikiz, subset = production.sarikiz$amount_m3 < up.sarikiz & production.sarikiz$amount_m3 > low.sarikiz)
 
 
 p1 <- ggplot(production.menemen.outlier, aes(y = amount_m3))
@@ -823,10 +826,44 @@ We almost remove all the outliers and the above boxplot suggests that Menemen Ku
 
 From Shapiro Test our p-values for two data is less than alpha(0.05) than we reject that our sets of data normally distributed. Let's try square root transformation.
 ```{r}
-
 shapiro.test(production.menemen.outlier$amount_m3)
 shapiro.test(production.sarikiz.outlier$amount_m3)
 ```
+
+```{r}
+production.menemen.log <- transform(production.menemen.outlier, 
+            amount_m3 = log(amount_m3))
+
+production.sarikiz.log <- transform(production.sarikiz.outlier, 
+            amount_m3 = log(amount_m3))
+
+shapiro.test(production.menemen.log$amount_m3)
+shapiro.test(production.sarikiz.log$amount_m3)
+
+```
+As we can see after transformation p-values for Shapiro normality test became almost zero and we reject that our data normally distributed. From now on we'll assume that our data normally distributed.
+
+- We'll assume that we don't have an information about sample standard deviation and assume that there is no significant difference between variances, and we'll use t-test.
+
+-**H0:** Mu consumptionSarikiz = Mu consumptionMenemen and **H1:** Mu consumptionSarikiz != Mu consumptionMenemen
+```{r}
+
+
+sarikiz.menemen.t.test <- t.test(x=production.sarikiz.outlier$amount_m3, 
+                     y=production.sarikiz.outlier$amount_m3, var.equal = TRUE)
+
+cons.sarikiz.menemen.diff <- round((sarikiz.menemen.t.test$estimate[1] - sarikiz.menemen.t.test$estimate[2]), 1)
+
+# Confidence level as a %
+conf.level <- attr(sarikiz.menemen.t.test$conf.int, "conf.level") * 100
+```
+
+
+**Results**: Our study finds that water productions are on average `r cons.sarikiz.menemen.diff`m^3^ between the Sarıkız Kuyuları and Menemen - Çavuşköy Kuyuları (t-statistic `r round(sarikiz.menemen.t.test$statistic,2)`, p=`r round(sarikiz.menemen.t.test$p.value, 3)`, `r conf.level`% CI [`r round(sarikiz.menemen.t.test$conf.int,1)`]m^3^ / 10^3^)
+
+**Our p-value is 1(greater than alpha) and Confidence interval includes 0. That's mean we can not reject that there is no significant difference in average water production between Sarıkız Kuyuları and Menemen - Çavuşköy Kuyuları. In other words, we can not say the average water production in Sarıkız Kuyuları and Menemen - Çavuşköy Kuyuları are significantly different from each other.** 
+
+
 
 ***
 
@@ -1075,3 +1112,183 @@ with(petition.log, t.test(x=petition_count[year=="2019"],
 ```
 
 **According to the Welch Two Sample t-test, our p-value is 0.6425, and also the 95 percent confidence interval contains 0. That is means we can not reject that the true difference in means is equal to 0. In other words, we can not say the petition counts in 2020 and 2019 are significantly different from each other.**
+
+***
+
+- **Is The tax collection time in 2018 takes more time than 2020? Let's test it.**
+
+- First visualize the data and see the shape of it.
+```{r}
+
+
+collection2020.2018 = subset(water.binding, subset = year != "2019")
+
+
+
+#Density functions
+base.plot <- ggplot(collection2020.2018, aes(x = collection_time_day)) +
+  xlab("Collection Time (day)")
+p <- base.plot + geom_density(aes(fill = year), alpha = 0.5)
+
+p
+
+shapiro.test(collection2020.2018$collection_time_day)
+```
+
+It seems that our both data right skewed let's try log transformation and make them normally distributed.
+```{r}
+
+collection2020.2018.log <- transform(collection2020.2018, 
+            collection_time_day = log10(collection_time_day))
+
+
+#Density functions
+base.plot <- ggplot(collection2020.2018.log, aes(x = collection_time_day)) +
+  xlab("Collection Time (day)")
+p <- base.plot + geom_density(aes(fill = year), alpha = 0.5)
+
+p
+
+qplot(x =year, y = collection_time_day,
+      geom = "boxplot", data = collection2020.2018.log,
+      xlab = "Year", 
+      ylab = "Binding Times in Days",
+      fill = I("lightblue"))
+
+shapiro.test(collection2020.2018.log$collection_time_day)
+```
+Now it looks better and also box plot suggest that tax collection time in 2020 takes less time than 2018. Now separate the data by year and apply the Shapiro Normality test.
+```{r}
+
+
+collection2020.log = subset(collection2020.2018.log, subset = year == "2020")
+collection2018.log = subset(collection2020.2018.log, subset = year == "2018")
+
+shapiro.test(collection2020.log$collection_time_day)
+shapiro.test(collection2018.log$collection_time_day)
+```
+
+Shapiro test also shows that our two sets are normally distributed We can have the two-sample t-test now.
+
+- We'll assume that we don't have an information about sample standard deviation and assume that there is no significant difference between variances, and we'll use t-test.
+
+-**H0:** Mu collectiontime2018 <= Mu collectiontime2020 and **H1:** Mu collectiontime2018 > Mu collectiontime2020
+```{r}
+collection.time.2020.2018.t.test <- t.test(collection2018.log$collection_time_day, collection2020.log$collection_time_day, var.equal = TRUE, alternative = "greater")
+collection.time.2020.2018.t.test
+collection.time.2020.2018.diff <- round((collection.time.2020.2018.t.test$estimate[1] - collection.time.2020.2018.t.test$estimate[2]), 1)
+
+# Confidence level as a %
+conf.level <- attr(collection.time.2020.2018.t.test$conf.int, "conf.level") * 100
+
+mean.of.transformed.data <- mean(collection2020.2018.log$collection_time_day)
+mean.of.transformed.data
+
+```
+
+
+**Results**: Our study finds that tax collection time are on average in 2018 takes `r ((collection.time.2020.2018.diff)**mean.of.transformed.data)*24`hours more than 2020 (t-statistic `r round(collection.time.2020.2018.t.test$statistic,2)`, p=`r round(collection.time.2020.2018.t.test$p.value, 3)`, `r conf.level`% CI [`r round(collection.time.2020.2018.t.test$conf.int,1)`]
+
+**The p-value is almost zero and less than alpha(0.05). Therefore we can reject the H0 which refers collectiontime2018 <= Mu collectiontime2020. In other words we reject that tax collection time in 2018 takes less time than 2020. We statistically show that tax collection time is shorter in 2020.** 
+
+***
+
+
+- **Does subscriber's subscription time longer than 30 days in average?**
+- First summarize the subscription time of subscribers.
+```{r}
+summary(water.binding$sub_time_day)
+```
+It seems that mean is greater than 30 days. Now let's look at the shape of data.
+```{r}
+
+
+p1 <- ggplot(water.binding, aes(sample = sub_time_day)) + ylab("Sub Time(day)") +
+  stat_qq() +
+  stat_qq_line()
+
+p2 <- ggplot(water.binding, aes(y = sub_time_day)) +
+  xlab("Sub Time(day)")
+p2 <- p2 + geom_boxplot(fill=I("orange"))
+
+p3 <- ggplot(water.binding, aes(x = sub_time_day)) +
+  xlab("Sub Time(day)")
+
+p3 <- p3 + geom_density(fill=I("orange"))
+
+ggarrange(p1, p2, p3, ncol =3, nrow = 1, labels = c( "Before Transform","Before Transform",
+                                                 "Before Transform"))
+
+
+shapiro.test(water.binding$sub_time_day)
+
+```
+
+As we can see from plots and also in Shapiro we reject that our data is normally distributed. Let's try log transformation.
+```{r}
+
+sub.time.log <- transform(water.binding, 
+            sub_time_day = log10(sub_time_day))
+
+p1 <- ggplot(sub.time.log, aes(sample = sub_time_day)) + ylab("Sub Time(day)") +
+  stat_qq() +
+  stat_qq_line()
+
+p2 <- ggplot(sub.time.log, aes(y = sub_time_day)) +
+  xlab("Sub Time(day)")
+p2 <- p2 + geom_boxplot(fill=I("orange"))
+
+p3 <- ggplot(sub.time.log, aes(x = sub_time_day)) +
+  xlab("Sub Time(day)")
+
+p3 <- p3 + geom_density(fill=I("orange"))
+
+ggarrange(p1, p2, p3, ncol =3, nrow = 1, labels = c( "After Transform","After Transform",
+                                                 "After Transform"))
+
+
+shapiro.test(sub.time.log$sub_time_day)
+```
+
+It seems that after transformed the data it perfectly normally distributed. 
+
+- We'll assume that we don't have an information about sample standard deviation and assume that there is no significant difference between variances, and we'll use t-test.
+
+-**H0:** Mu sub_time_day <= 30 and **H1:** Mu sub_time_day > 30
+```{r}
+sub.time.t.test<- t.test(sub.time.log$sub_time_day, alternative = c("greater"), mu = log10(30), conf.level = 0.95)
+sub.time.t.test
+
+# Confidence level as a %
+conf.level <- attr(collection.time.2020.2018.t.test$conf.int, "conf.level") * 100
+
+mean.of.transformed.data <- mean(sub.time.log$sub_time_day)
+round(sub.time.t.test$p.value,3)
+```
+
+
+**Results**: Our study finds that (t-statistic `r round(sub.time.t.test$statistic,2)`, p=`r round(sub.time.t.test$p.value, 3)`, `r conf.level`% CI [`r round(sub.time.t.test$conf.int,1)`], mean of data is found `r round(10**mean.of.transformed.data)` days.
+
+
+
+**Conclusion:**The p-value is 0.024 and it's less than alpha(0.05). Therefore we reject the H0 which refers Mu sub_time_day <= 30 days. In other words we reject that subscriber's subscription time less than 30 days on average We statistically show that subscriber's subscription time is longer than 30 days.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
