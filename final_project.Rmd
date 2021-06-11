@@ -867,6 +867,126 @@ conf.level <- attr(sarikiz.menemen.t.test$conf.int, "conf.level") * 100
 
 ***
 
+### ANOVA
+
+- Let's compare the less productive three source and see if the average production of each are equal or not.
+
+- List the production of the sources by descending order.
+```{r}
+df1 <- water.production %>% 
+  group_by(source) %>% 
+  summarize(total_amount = sum(amount_m3))
+
+df1 <- df1 %>%
+  arrange(desc(total_amount))
+
+df1 %>% tbl_df %>% print(n=15)
+
+```
+As we can see from above the less productive three sources are Güzelhisar Barajı, Ödemiş İçme Suyu Arıtma Tesisleri and Buca ve Sarnıç Kuyuları. Now visualize them and see if the data normally distributed or not. Before seperating the groups amount_m3 will be divided by 10^3^ for observing the values better.
+```{r}
+water.production.1 <- water.production
+water.production.1$amount_m3 <- (water.production$amount_m3) / 1000
+
+water.cons.guzelhasir= subset(water.production.1, subset = source == "Güzelhisar Barajı" & amount_m3 > 0)
+water.cons.odemis = subset(water.production.1, subset = source == "Ödemiş İçme Suyu Arıtma Tesisleri" & amount_m3 > 0)
+water.cons.buca.sarnic = subset(water.production.1, subset = source == "Buca ve Sarnıç Kuyuları" & amount_m3 > 0)
+
+p1 <- ggplot(water.cons.guzelhasir, aes(sample = amount_m3)) + ylab("Water Production") +
+  stat_qq() +
+  stat_qq_line()
+
+p2 <- ggplot(water.cons.odemis, aes(sample = amount_m3)) + ylab("Water Production") +
+  stat_qq() +
+  stat_qq_line()
+
+p3 <- ggplot(water.cons.buca.sarnic, aes(sample = amount_m3)) + ylab("Water Production") +
+  stat_qq() +
+  stat_qq_line()
+
+ggarrange(p1, p2, p3, ncol =3, nrow = 1, labels = c( "Before Transform","Before Transform",
+                                                 "Before Transform"))
+
+
+shapiro.test(water.cons.guzelhasir$amount_m3)
+shapiro.test(water.cons.odemis$amount_m3)
+shapiro.test(water.cons.buca.sarnic$amount_m3)
+
+```
+From above plots and the Shapiro test we can conclude that three set of data are not normally distributed. Let's transform them and check the normality again.
+```{r}
+
+water.cons.guzelhasir.log <- transform(water.cons.guzelhasir, 
+            amount_m3 = log10(amount_m3))
+water.cons.odemis.log <- transform(water.cons.odemis, 
+            amount_m3 = log10(amount_m3))
+water.cons.buca.sarnic.log <- transform(water.cons.buca.sarnic, 
+            amount_m3 = log10(amount_m3))
+
+p1 <- ggplot(water.cons.guzelhasir.log, aes(sample = amount_m3)) + ylab("Güzelhasır Water Production") +
+  stat_qq() +
+  stat_qq_line()
+
+p2 <- ggplot(water.cons.odemis.log, aes(sample = amount_m3)) + ylab("Ödemiş Water Production") +
+  stat_qq() +
+  stat_qq_line()
+
+p3 <- ggplot(water.cons.buca.sarnic.log, aes(sample = amount_m3)) + ylab("Buca-Sarnıç Water Production") +
+  stat_qq() +
+  stat_qq_line()
+
+ggarrange(p1, p2, p3, ncol =3, nrow = 1, labels = c( "After Transform","After Transform",
+                                                 "After Transform"))
+
+
+shapiro.test(water.cons.guzelhasir.log$amount_m3)
+shapiro.test(water.cons.odemis.log$amount_m3)
+shapiro.test(water.cons.buca.sarnic.log$amount_m3)
+```
+
+After log transformassion the data still not normal and from now on we'll assume that the data normally distributed. Now let's compute the One-way ANOVA test.
+
+**H0:** Mu cons.guzelhasir = Mu cons.odemis = Mu cons.buca.sarnic, **H1:** At least one differs.
+```{r}
+water.production.1 <- subset(water.production.1, subset =  (source == "Güzelhisar Barajı" | source == "Buca ve Sarnıç Kuyuları" 
+                                                                     | source == "Ödemiş İçme Suyu Arıtma Tesisleri") & amount_m3 > 0)
+
+water.production.1.log <- transform(water.production.1, 
+            amount_m3 = log10(amount_m3))
+
+# Compute the analysis of variance
+res.aov <- aov(amount_m3 ~ source, data = water.production.1.log)
+# Summary of the analysis
+summary(res.aov)
+```
+**Result:** The p-value obtained from ANOVA is almost 0 and less than alpha(0.05) therefore we reject that the average water production of three sources is the same. In other words, there is strong evidence that at least one differs.
+
+- Let's compute the Tukey Test and see which are differs.
+```{r}
+
+TukeyHSD(res.aov)
+
+```
+**Result:** The lower and upper bound of:
+
+- Güzelhisar Barajı-Buca ve Sarnıç Kuyuları: (0.172, 0.333)
+
+- Ödemiş İçme Suyu Arıtma Tesisleri-Buca ve Sarnıç Kuyuları: (0.157, 0.353)
+
+- Ödemiş İçme Suyu Arıtma Tesisleri-Güzelhisar Barajı: (-0.094, 0.101)
+
+**Conclusion:** From the above results we can conclude that:
+
+- The interval of Güzelhisar Barajı-Buca ve Sarnıç Kuyuları doesn't contain 0 therefore there is strong evidence that these two differ.
+
+- Ödemiş İçme Suyu Arıtma Tesisleri-Buca ve Sarnıç Kuyuları: doesn't contain 0 therefore there is strong evidence that these two differ.
+
+- Ödemiş İçme Suyu Arıtma Tesisleri-Güzelhisar Barajı: contains 0 therefore there is strong evidence that these two do not differ.
+
+
+
+***
+
 # WATER BINDING
 
 ***
@@ -1274,9 +1394,74 @@ round(sub.time.t.test$p.value,3)
 **Conclusion:**The p-value is 0.024 and it's less than alpha(0.05). Therefore we reject the H0 which refers Mu sub_time_day <= 30 days. In other words we reject that subscriber's subscription time less than 30 days on average We statistically show that subscriber's subscription time is longer than 30 days.
 
 
+***
+
+### ANOVA TEST
+
+We were visuilazed and talk about the water binding times of 2020, 2019 and 2018. Let's visualize the boxplots again and test them if the average binding times of these three years are equal or not.
+```{r}
+#boxplot(birthwt$birthwt.grams~birthwt$hypertension)
 
 
+qplot(x =year, y = binding_time_day,
+      geom = "boxplot", data = water.binding,
+      xlab = "Year", 
+      ylab = "Binding Times in Days",
+      fill = I("lightblue"))
+```
 
+Let's summarize the water binding times(day) for years and check for Shapiro Normality Test.
+
+```{r}
+
+group_by(water.binding, year) %>%
+  summarise(
+    count = n(),
+    mean = mean(binding_time_day, na.rm = TRUE),
+    sd = sd(binding_time_day, na.rm = TRUE)
+  )
+
+
+shapiro.test(water.binding$binding_time_day)
+
+```
+It seems that there is some differences between the average binding times of years. Also the p-value of Shapiro Test less than alpha(0.05) then we reject that the data normally distributed.
+
+Let's take the log of data and try to transform it and check the normality for each year.
+```{r}
+
+water.binding.log <- transform(water.binding, 
+            binding_time_day = log10(binding_time_day))
+
+
+water.binding.2020= subset(water.binding.log, subset = year == "2020")
+water.binding.2019 = subset(water.binding.log, subset = year == "2019")
+water.binding.2018 = subset(water.binding.log, subset = year == "2018")
+
+shapiro.test(water.binding.2020$binding_time_day)
+shapiro.test(water.binding.2019$binding_time_day)
+shapiro.test(water.binding.2018$binding_time_day)
+
+
+#Density functions
+p <- ggplot(water.binding.log, aes(x = binding_time_day)) +
+  xlab("Binding Time (day)")
+p <- p + geom_density(aes(fill = year), alpha = 0.5)
+
+p
+```
+
+After transformation each year looks like normally distributed. We can conclude them from the Shapiro test. All the p-values are greater than alpha(0.05) then we can not reject that data normally distributed. Now we can compute the One-way ANOVA test.
+
+**H0:** Mu bind_time_2020 =  Mu bind_time_2019 = Mu bind_time_2018, **H1:** At least one differs.
+```{r}
+
+# Compute the analysis of variance
+res.aov <- aov(binding_time_day ~ year, data = water.binding.log)
+summary(res.aov)
+```
+
+**Conclusion:** From the above table, we can see the p-value of the ANOVA test is 0.258 which greater than alpha(0.05). Then, we can not reject H0 which refers to three years of average binding time(day) are equal. In other words, there is no strong evidence at least one differs.
 
 
 
